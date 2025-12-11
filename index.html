@@ -1,0 +1,329 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Vectorización de Siluetas</title>
+  <style>
+    :root {
+      --bg: #0f172a;
+      --panel: #111827;
+      --accent: #10b981;
+      --text: #e5e7eb;
+      --muted: #9ca3af;
+      --border: #1f2937;
+    }
+
+    * {
+      box-sizing: border-box;
+      font-family: "Inter", system-ui, -apple-system, sans-serif;
+    }
+
+    body {
+      margin: 0;
+      background: radial-gradient(circle at 20% 20%, #1f2937 0, #0b1220 35%), var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      display: flex;
+      justify-content: center;
+      align-items: flex-start;
+      padding: 32px;
+    }
+
+    .app {
+      width: min(1100px, 100%);
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 24px;
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.4);
+    }
+
+    header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      margin-bottom: 16px;
+      flex-wrap: wrap;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: 1.6rem;
+      letter-spacing: 0.5px;
+    }
+
+    p.description {
+      margin: 0;
+      color: var(--muted);
+      line-height: 1.5;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+      gap: 16px;
+    }
+
+    .panel {
+      background: rgba(255, 255, 255, 0.02);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 16px;
+      min-height: 260px;
+    }
+
+    .panel h2 {
+      margin: 0 0 12px;
+      font-size: 1.1rem;
+      color: #f8fafc;
+      letter-spacing: 0.3px;
+    }
+
+    video, canvas, img {
+      width: 100%;
+      border-radius: 10px;
+      background: #0b1220;
+      border: 1px solid var(--border);
+      display: block;
+    }
+
+    video {
+      max-height: 320px;
+      object-fit: cover;
+    }
+
+    canvas {
+      max-height: 480px;
+    }
+
+    .controls {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      align-items: center;
+      margin: 12px 0;
+    }
+
+    .controls label {
+      font-size: 0.95rem;
+      color: var(--muted);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    input[type="range"] {
+      width: 160px;
+    }
+
+    button {
+      background: linear-gradient(135deg, #10b981, #0ea5e9);
+      color: #0b1220;
+      border: none;
+      padding: 10px 16px;
+      border-radius: 10px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: transform 0.1s ease, box-shadow 0.2s ease;
+      box-shadow: 0 10px 30px rgba(16, 185, 129, 0.35);
+    }
+
+    button:disabled {
+      background: #1f2937;
+      color: #6b7280;
+      box-shadow: none;
+      cursor: not-allowed;
+    }
+
+    button:not(:disabled):hover {
+      transform: translateY(-1px);
+      box-shadow: 0 12px 40px rgba(14, 165, 233, 0.35);
+    }
+
+    textarea {
+      width: 100%;
+      min-height: 240px;
+      background: #0b1220;
+      color: #e5e7eb;
+      border-radius: 10px;
+      border: 1px solid var(--border);
+      padding: 12px;
+      resize: vertical;
+      font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+    }
+
+    .status {
+      color: var(--muted);
+      font-size: 0.95rem;
+      margin: 8px 0 0;
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <header>
+      <div>
+        <h1>Captura y vectoriza siluetas</h1>
+        <p class="description">
+          Usa la webcam para capturar una herramienta sobre un fondo uniforme, ajusta el umbral y genera un SVG listo para cortar espuma.
+        </p>
+      </div>
+    </header>
+
+    <div class="grid">
+      <section class="panel">
+        <h2>Webcam</h2>
+        <video id="video" autoplay playsinline muted></video>
+        <div class="controls">
+          <button id="captureBtn">Capturar</button>
+          <label>
+            Umbral
+            <input id="threshold" type="range" min="0" max="255" value="128" />
+            <span id="thresholdValue">128</span>
+          </label>
+        </div>
+        <p class="status" id="status">Inicializando cámara...</p>
+      </section>
+
+      <section class="panel">
+        <h2>Canvas (silueta)</h2>
+        <canvas id="canvas" width="640" height="480"></canvas>
+        <div class="controls">
+          <button id="vectorizeBtn" disabled>Vectorizar</button>
+          <button id="downloadBtn" disabled>Descargar SVG</button>
+        </div>
+      </section>
+    </div>
+
+    <div class="grid" style="margin-top: 16px;">
+      <section class="panel">
+        <h2>Vista previa SVG</h2>
+        <img id="svgPreview" alt="Vista previa del SVG" />
+      </section>
+      <section class="panel">
+        <h2>Código SVG</h2>
+        <textarea id="svgCode" spellcheck="false" readonly></textarea>
+      </section>
+    </div>
+  </div>
+
+  <script src="https://unpkg.com/imagetracerjs"></script>
+  <script>
+    const video = document.getElementById('video');
+    const canvas = document.getElementById('canvas');
+    const ctx = canvas.getContext('2d');
+    const captureBtn = document.getElementById('captureBtn');
+    const vectorizeBtn = document.getElementById('vectorizeBtn');
+    const downloadBtn = document.getElementById('downloadBtn');
+    const thresholdSlider = document.getElementById('threshold');
+    const thresholdValue = document.getElementById('thresholdValue');
+    const status = document.getElementById('status');
+    const svgPreview = document.getElementById('svgPreview');
+    const svgCode = document.getElementById('svgCode');
+
+    // Almacena la imagen original capturada para recalcular el umbral sin perder calidad
+    let originalImageData = null;
+
+    // Inicialización de la cámara
+    async function initCamera() {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+        video.srcObject = stream;
+        status.textContent = 'Cámara lista. Coloca el objeto sobre un fondo uniforme y presiona Capturar.';
+      } catch (error) {
+        console.error('No se pudo acceder a la cámara', error);
+        status.textContent = 'Error: no se pudo acceder a la cámara. Revisa los permisos.';
+        captureBtn.disabled = true;
+      }
+    }
+
+    // Captura de frame desde el video hacia el canvas
+    function captureFrame() {
+      if (!video.videoWidth || !video.videoHeight) {
+        status.textContent = 'Esperando a que el video esté listo...';
+        return;
+      }
+
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+      originalImageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      applyThreshold();
+      status.textContent = 'Frame capturado. Ajusta el umbral o vectoriza la silueta.';
+      vectorizeBtn.disabled = false;
+    }
+
+    // Aplica threshold para extraer la silueta en blanco y negro
+    function applyThreshold() {
+      if (!originalImageData) return;
+
+      const threshold = parseInt(thresholdSlider.value, 10);
+      const data = new Uint8ClampedArray(originalImageData.data);
+
+      for (let i = 0; i < data.length; i += 4) {
+        const r = data[i];
+        const g = data[i + 1];
+        const b = data[i + 2];
+        const gray = 0.299 * r + 0.587 * g + 0.114 * b;
+        const value = gray >= threshold ? 255 : 0;
+        data[i] = data[i + 1] = data[i + 2] = value;
+        data[i + 3] = 255; // canal alfa
+      }
+
+      const bwImage = new ImageData(data, originalImageData.width, originalImageData.height);
+      ctx.putImageData(bwImage, 0, 0);
+    }
+
+    // Llama a ImageTracer para convertir el canvas binarizado en SVG
+    function vectorize() {
+      const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      const options = {
+        ltres: 0.5,
+        qtres: 0.5,
+        pathomit: 0,
+        numberofcolors: 2,
+        pal: [
+          [0, 0, 0, 255],
+          [255, 255, 255, 255]
+        ]
+      };
+
+      const svgString = ImageTracer.imagedataToSVG(imageData, options);
+      const encoded = 'data:image/svg+xml;utf8,' + encodeURIComponent(svgString);
+      svgPreview.src = encoded;
+      svgCode.value = svgString;
+      downloadBtn.disabled = false;
+      status.textContent = 'SVG generado. Puedes descargarlo o editarlo.';
+    }
+
+    // Genera un Blob con el SVG y dispara la descarga
+    function downloadSVG() {
+      if (!svgCode.value) return;
+      const blob = new Blob([svgCode.value], { type: 'image/svg+xml' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = 'silueta_herramienta.svg';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+    }
+
+    // Eventos de UI
+    captureBtn.addEventListener('click', captureFrame);
+    vectorizeBtn.addEventListener('click', vectorize);
+    downloadBtn.addEventListener('click', downloadSVG);
+
+    thresholdSlider.addEventListener('input', () => {
+      thresholdValue.textContent = thresholdSlider.value;
+      applyThreshold();
+    });
+
+    // Arranque de la cámara al cargar la página
+    initCamera();
+  </script>
+</body>
+</html>
